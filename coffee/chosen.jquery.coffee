@@ -351,10 +351,12 @@ class Chosen extends AbstractChosen
       high.addClass "result-selected"
       position = high_id.substr(high_id.lastIndexOf("_") + 1 )
       
+      raiseNewValueAddedEvent = no
       if position < 0
         # is an added element, create option
-        newOptionText = high.html()
+        newOptionText = unescape(high.attr('newResultText'))
         position = this.addNewOption newOptionText
+        raiseNewValueAddedEvent = yes
       
       item = @results_data[position]
       item.selected = true
@@ -372,6 +374,10 @@ class Chosen extends AbstractChosen
       @search_field.val ""
 
       @form_field_jq.trigger "change"
+      
+      if raiseNewValueAddedEvent
+        @form_field_jq.trigger("newValueAdded",newOptionText)
+        
       this.search_field_scale()
 
   result_activate: (el) ->
@@ -460,12 +466,13 @@ class Chosen extends AbstractChosen
   
     if !terms
         return
-        
+    
     text = '"'+terms + '" aufnehmen'
     addingOptionid = @container_id + "_o_" + @addedOptionIterator
     @addedOptionIterator--
     
-    addingHtml = $('<li class="active-result add-result" id='+addingOptionid+'>' + text + '</li>')
+    escapedTerms = escape terms
+    addingHtml = $('<li class="active-result add-result" id='+addingOptionid+' newResultText='+escapedTerms+'>' + text + '</li>')
     @search_results.append addingHtml
     
   addingResult_clear: ->
@@ -476,7 +483,6 @@ class Chosen extends AbstractChosen
     newOption = $('<option></option>', { value : newValue}).text(newElementText)
     $(@form_field).append newOption
     
-    debugger
     newArrayIndex = @results_data.length 
     @results_data.push
       array_index: newArrayIndex
@@ -488,7 +494,7 @@ class Chosen extends AbstractChosen
       selected: newOption.is("selected")
       disabled: newOption.is("disabled")
       classes: newOption.attr('class')
-      #style: newOption.css()
+      style: newOption.attr('style')
       
     return newArrayIndex
       
