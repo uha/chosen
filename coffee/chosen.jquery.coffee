@@ -308,6 +308,10 @@ class Chosen extends AbstractChosen
     @choices += 1
     @search_container.before  '<li class="search-choice" id="' + choice_id + '"><span>' + item.html + '</span><a href="javascript:void(0)" class="search-choice-close" rel="' + item.array_index + '"></a></li>'
     link = $('#' + choice_id).find("a").first()
+    
+    if item.newElement
+        link.attr('newElement', 'true')
+        
     link.click (evt) => this.choice_destroy_link_click(evt)
 
   choice_destroy_link_click: (evt) ->
@@ -320,12 +324,22 @@ class Chosen extends AbstractChosen
 
   choice_destroy: (link) ->
     @choices -= 1
+    relId = link.attr("rel")
+    
+    raiseNewValueDeletedEvent = no
+    if $(link).attr('newElement') and @enableCreationOfNewElements
+        raiseNewValueDeletedEvent = yes
+        newElementText = this.result_getText relId
+    
     this.show_search_field_default()
 
     this.results_hide() if @is_multiple and @choices > 0 and @search_field.val().length < 1
 
-    this.result_deselect (link.attr "rel")
+    this.result_deselect relId
     link.parents('li').first().remove()
+    
+    if raiseNewValueDeletedEvent
+        @form_field_jq.trigger('newValueDeleted',newElementText)
 
   results_reset: (evt) ->
     @form_field.options[0].selected = true
@@ -352,7 +366,7 @@ class Chosen extends AbstractChosen
       position = high_id.substr(high_id.lastIndexOf("_") + 1 )
       
       raiseNewValueAddedEvent = no
-      if position < 0
+      if position < 0 and @enableCreationOfNewElements
         # is an added element, create option
         newOptionText = unescape(high.attr('newResultText'))
         position = this.addNewOption newOptionText
@@ -418,39 +432,42 @@ class Chosen extends AbstractChosen
       if not option.disabled and not option.empty
         if option.group
           $('#' + option.dom_id).css('display', 'none')
-        else if not (@is_multiple and option.selected)
-          found = false
-          result_id = option.dom_id
-          result = $("#" + result_id)
-          
-          if regex.test option.html
-            found = true
-            results += 1
+        else 
+          if @enableCreationOfNewElements
             exactFound = yes if option.html.toLowerCase() == searchText.toLowerCase()
-          else if option.html.indexOf(" ") >= 0 or option.html.indexOf("[") == 0
-            #TODO: replace this substitution of /\[\]/ with a list of characters to skip.
-            parts = option.html.replace(/\[|\]/g, "").split(" ")
-            if parts.length
-              for part in parts
-                if regex.test part
-                  found = true
-                  results += 1
-
-          if found
-            if searchText.length
-              startpos = option.html.search zregex
-              text = option.html.substr(0, startpos + searchText.length) + '</em>' + option.html.substr(startpos + searchText.length)
-              text = text.substr(0, startpos) + '<em>' + text.substr(startpos)
-            else
-              text = option.html
             
-            result.html(text)
-            this.result_activate result
+          if not (@is_multiple and option.selected)
+              found = false
+              result_id = option.dom_id
+              result = $("#" + result_id)
+              
+              if regex.test option.html
+                found = true
+                results += 1
+              else if option.html.indexOf(" ") >= 0 or option.html.indexOf("[") == 0
+                #TODO: replace this substitution of /\[\]/ with a list of characters to skip.
+                parts = option.html.replace(/\[|\]/g, "").split(" ")
+                if parts.length
+                  for part in parts
+                    if regex.test part
+                      found = true
+                      results += 1
 
-            $("#" + @results_data[option.group_array_index].dom_id).css('display', 'list-item') if option.group_array_index?
-          else
-            this.result_clear_highlight() if @result_highlight and result_id is @result_highlight.attr 'id'
-            this.result_deactivate result
+              if found
+                if searchText.length
+                  startpos = option.html.search zregex
+                  text = option.html.substr(0, startpos + searchText.length) + '</em>' + option.html.substr(startpos + searchText.length)
+                  text = text.substr(0, startpos) + '<em>' + text.substr(startpos)
+                else
+                  text = option.html
+                
+                result.html(text)
+                this.result_activate result
+
+                $("#" + @results_data[option.group_array_index].dom_id).css('display', 'list-item') if option.group_array_index?
+              else
+                this.result_clear_highlight() if @result_highlight and result_id is @result_highlight.attr 'id'
+                this.result_deactivate result
     
     if !exactFound
         this.addingResult_add searchText
@@ -461,7 +478,7 @@ class Chosen extends AbstractChosen
       this.winnow_results_set_highlight()
 
   addingResult_add: (terms) ->
-    if !@is_multiple
+    if !@is_multiple or !@enableCreationOfNewElements
         return
   
     if !terms
@@ -480,14 +497,13 @@ class Chosen extends AbstractChosen
     
   addNewOption: (newElementText) ->
     newValue = @form_field.options.length
-    newOption = $('<option></option>', { value : newValue}).text(newElementText)
+    newOption = $('<option></option>', { value : newValue}).text(newElementText).attr('newElement','true')
     $(@form_field).append newOption
     
     newArrayIndex = @results_data.length 
     @results_data.push
       array_index: newArrayIndex
       options_index: newValue
-      empty: true
       value: newOption.val()
       text: newOption.text()
       html: newOption.html()
@@ -495,6 +511,7 @@ class Chosen extends AbstractChosen
       disabled: newOption.is("disabled")
       classes: newOption.attr('class')
       style: newOption.attr('style')
+      newElement: true
       
     return newArrayIndex
       
@@ -612,6 +629,12 @@ class Chosen extends AbstractChosen
     while $("#" + string).length > 0
       string += this.generate_random_char()
     string
+    
+  result_getText: (pos) ->
+    result_data = @results_data[pos]
+    option = @form_field.options[result_data.options_index]
+    if option
+        option.text
     
 get_side_border_padding = (elmt) ->
   side_border_padding = elmt.outerWidth() - elmt.width()
