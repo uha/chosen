@@ -66,6 +66,8 @@ class Chosen extends AbstractChosen
     this.results_build()
     this.set_tab_index()
     @form_field_jq.trigger("liszt:ready", {chosen: this})
+    
+    @addedOptionIterator = -1
 
   set_dropdown_width: ->
     containerWidth = @container.outerWidth()
@@ -347,8 +349,13 @@ class Chosen extends AbstractChosen
         @result_single_selected = high
       
       high.addClass "result-selected"
-      
       position = high_id.substr(high_id.lastIndexOf("_") + 1 )
+      
+      if position < 0
+        # is an added element, create option
+        newOptionText = high.html()
+        position = this.addNewOption newOptionText
+      
       item = @results_data[position]
       item.selected = true
 
@@ -392,13 +399,15 @@ class Chosen extends AbstractChosen
 
   winnow_results: ->
     this.no_results_clear()
+    this.addingResult_clear()
     
     results = 0
 
     searchText = if @search_field.val() is @default_text then "" else $('<div/>').text($.trim(@search_field.val())).html()
     regex = new RegExp('^' + searchText.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), 'i')
     zregex = new RegExp(searchText.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), 'i')
-
+    exactFound = no
+    
     for option in @results_data
       if not option.disabled and not option.empty
         if option.group
@@ -411,6 +420,7 @@ class Chosen extends AbstractChosen
           if regex.test option.html
             found = true
             results += 1
+            exactFound = yes if option.html.toLowerCase() == searchText.toLowerCase()
           else if option.html.indexOf(" ") >= 0 or option.html.indexOf("[") == 0
             #TODO: replace this substitution of /\[\]/ with a list of characters to skip.
             parts = option.html.replace(/\[|\]/g, "").split(" ")
@@ -435,12 +445,53 @@ class Chosen extends AbstractChosen
           else
             this.result_clear_highlight() if @result_highlight and result_id is @result_highlight.attr 'id'
             this.result_deactivate result
-
+    
+    if !exactFound
+        this.addingResult_add searchText
+            
     if results < 1 and searchText.length
       this.no_results searchText
     else
       this.winnow_results_set_highlight()
 
+  addingResult_add: (terms) ->
+    if !@is_multiple
+        return
+  
+    if !terms
+        return
+        
+    text = '"'+terms + '" aufnehmen'
+    addingOptionid = @container_id + "_o_" + @addedOptionIterator
+    @addedOptionIterator--
+    
+    addingHtml = $('<li class="active-result add-result" id='+addingOptionid+'>' + text + '</li>')
+    @search_results.append addingHtml
+    
+  addingResult_clear: ->
+    @search_results.find(".add-result").remove()
+    
+  addNewOption: (newElementText) ->
+    newValue = @form_field.options.length
+    newOption = $('<option></option>', { value : newValue}).text(newElementText)
+    $(@form_field).append newOption
+    
+    debugger
+    newArrayIndex = @results_data.length 
+    @results_data.push
+      array_index: newArrayIndex
+      options_index: newValue
+      empty: true
+      value: newOption.val()
+      text: newOption.text()
+      html: newOption.html()
+      selected: newOption.is("selected")
+      disabled: newOption.is("disabled")
+      classes: newOption.attr('class')
+      #style: newOption.css()
+      
+    return newArrayIndex
+      
   winnow_results_clear: ->
     @search_field.val ""
     lis = @search_results.find("li")
@@ -463,9 +514,9 @@ class Chosen extends AbstractChosen
   no_results: (terms) ->
     no_results_html = $('<li class="no-results">' + @results_none_found + ' "<span></span>"</li>')
     no_results_html.find("span").first().html(terms)
-
+    
     @search_results.append no_results_html
-  
+    
   no_results_clear: ->
     @search_results.find(".no-results").remove()
 
