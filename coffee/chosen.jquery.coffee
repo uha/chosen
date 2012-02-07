@@ -95,10 +95,13 @@ class Chosen extends AbstractChosen
     @search_results.mouseout (evt) => this.search_results_mouseout(evt)
 
     @form_field_jq.bind "liszt:updated", (evt) => this.results_update_field(evt)
+    
+    @form_field_jq.bind "handleNewItems", (evt, newItemString) => this.results_addNewItems(evt, newItemString)
 
     @search_field.blur (evt) => this.input_blur(evt)
     @search_field.keyup (evt) => this.keyup_checker(evt)
     @search_field.keydown (evt) => this.keydown_checker(evt)
+    @search_field.keypress (evt) => this.keypress_checker(evt)
 
     if @is_multiple
       @search_choices.click (evt) => this.choices_click(evt)
@@ -330,6 +333,7 @@ class Chosen extends AbstractChosen
     if $(link).attr('newElement') and @enableCreationOfNewElements
         raiseNewValueDeletedEvent = yes
         newElementText = this.result_getText relId
+        this.remove_newElement relId
     
     this.show_search_field_default()
 
@@ -341,6 +345,9 @@ class Chosen extends AbstractChosen
     if raiseNewValueDeletedEvent
         @form_field_jq.trigger('newValueDeleted',newElementText)
 
+  remove_newElement: (pos) ->
+    @results_data[pos].disabled = true
+        
   results_reset: (evt) ->
     @form_field.options[0].selected = true
     @selected_item.find("span").text @default_text
@@ -372,16 +379,7 @@ class Chosen extends AbstractChosen
         position = this.addNewOption newOptionText
         raiseNewValueAddedEvent = yes
       
-      item = @results_data[position]
-      item.selected = true
-
-      @form_field.options[item.options_index].selected = true
-
-      if @is_multiple
-        this.choice_build item
-      else
-        @selected_item.find("span").first().text item.text
-        this.single_deselect_control_build() if @allow_single_deselect
+      this.result_select_option position
       
       this.results_hide() unless evt.metaKey and @is_multiple
 
@@ -393,7 +391,20 @@ class Chosen extends AbstractChosen
         @form_field_jq.trigger("newValueAdded",newOptionText)
         
       this.search_field_scale()
+    
+  result_select_option: (position) ->
+    item = @results_data[position]
+    item.selected = true
 
+    @form_field.options[item.options_index].selected = true
+
+    if @is_multiple
+      this.choice_build item
+    else
+      @selected_item.find("span").first().text item.text
+      this.single_deselect_control_build() if @allow_single_deselect
+  
+      
   result_activate: (el) ->
     el.addClass("active-result")
 
@@ -423,7 +434,8 @@ class Chosen extends AbstractChosen
     
     results = 0
 
-    searchText = if @search_field.val() is @default_text then "" else $('<div/>').text($.trim(@search_field.val())).html()
+    plainSearchText = $.trim(@search_field.val())
+    searchText = if plainSearchText is @default_text then "" else $('<div/>').text($.trim(plainSearchText)).html()
     regex = new RegExp('^' + searchText.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), 'i')
     zregex = new RegExp(searchText.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"), 'i')
     exactFound = no
@@ -470,7 +482,7 @@ class Chosen extends AbstractChosen
                 this.result_deactivate result
     
     if !exactFound
-        this.addingResult_add searchText
+        this.addingResult_add plainSearchText
             
     if results < 1 and searchText.length
       this.no_results searchText
@@ -487,23 +499,26 @@ class Chosen extends AbstractChosen
     text = '"'+terms + '" aufnehmen'
     addingOptionid = @container_id + "_o_" + @addedOptionIterator
     @addedOptionIterator--
-    
     escapedTerms = escape terms
     addingHtml = $('<li class="active-result add-result" id='+addingOptionid+' newResultText='+escapedTerms+'>' + text + '</li>')
     @search_results.append addingHtml
+    @addNewElementItem = addingHtml;
     
   addingResult_clear: ->
     @search_results.find(".add-result").remove()
+    @addNewElementItem = null;
     
   addNewOption: (newElementText) ->
-    newValue = @form_field.options.length
+    newOptionsIndex = @form_field.options.length
+    newValue = this.getMaximumValueOfOptions()
+    newValue++
     newOption = $('<option></option>', { value : newValue}).text(newElementText).attr('newElement','true')
     $(@form_field).append newOption
     
     newArrayIndex = @results_data.length 
     @results_data.push
       array_index: newArrayIndex
-      options_index: newValue
+      options_index: newOptionsIndex
       value: newOption.val()
       text: newOption.text()
       html: newOption.html()
@@ -528,7 +543,9 @@ class Chosen extends AbstractChosen
 
   winnow_results_set_highlight: ->
     if not @result_highlight
-
+      if @addNewElementItem
+        return
+      
       selected_results = if not @is_multiple then @search_results.find(".result-selected.active-result") else []
       do_high = if selected_results.length then selected_results.first() else @search_results.find(".active-result").first()
 
@@ -600,6 +617,13 @@ class Chosen extends AbstractChosen
       when 40
         this.keydown_arrow()
         break
+        
+  keypress_checker: (evt) ->
+    stroke = evt.which ? evt.keyCode
+    switch stroke
+      when 13
+        evt.preventDefault()
+        return false
   
   search_field_scale: ->
     if @is_multiple
@@ -635,6 +659,24 @@ class Chosen extends AbstractChosen
     option = @form_field.options[result_data.options_index]
     if option
         option.text
+        
+  results_addNewItems: (evt, newItemString) ->
+    if (!newItemString)
+        return
+    newItems = newItemString.split(';')
+    for newItem in newItems
+        if newItem
+            position = this.addNewOption newItem
+            this.result_select_option position
+    
+  getMaximumValueOfOptions: ->
+    maxValue = 0
+    for data in @results_data
+      if (data.value)
+        if (parseInt(data.value) > maxValue)
+          maxValue = data.value
+          
+    maxValue
     
 get_side_border_padding = (elmt) ->
   side_border_padding = elmt.outerWidth() - elmt.width()

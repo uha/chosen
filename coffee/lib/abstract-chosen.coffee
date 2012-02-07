@@ -32,6 +32,7 @@ class AbstractChosen
     @choices = 0
     @results_none_found = @options.no_results_text or "No results match"
     @enableCreationOfNewElements = @options.enableCreationOfNewElements
+    @addNewElementItem = null
 
   mouse_enter: -> @mouse_on_container = true
   mouse_leave: -> @mouse_on_container = false
@@ -89,7 +90,11 @@ class AbstractChosen
           this.results_search()
       when 13
         evt.preventDefault()
+        if !@result_highlight and @enableCreationOfNewElements and @addNewElementItem
+            @result_highlight = @addNewElementItem
+        
         this.result_select(evt) if this.results_showing
+            
       when 27
         this.results_hide() if @results_showing
         return true
